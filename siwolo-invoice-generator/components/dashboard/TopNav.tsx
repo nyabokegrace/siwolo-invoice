@@ -1,46 +1,49 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 import Image from "next/image";
-import { Download, Printer, RotateCcw, CheckCircle2, Loader2, Sparkles } from "lucide-react";
-import { generatePdf, triggerPrint } from "@/lib/pdf";
+import {
+  Download,
+  Printer,
+  Plus,
+  Save,
+  CheckCircle2,
+  Loader2,
+  FolderOpen,
+  Share2,
+  Sparkles,
+} from "lucide-react";
+import { triggerPrint } from "@/lib/pdf";
 
 interface TopNavProps {
   invoiceNumber: string;
   clientName: string;
+  savedInvoicesCount: number;
+  isSaved: boolean;
+  onSaveInvoice: () => void;
+  onOpenInvoicesList: () => void;
+  onOpenShareModal: () => void;
+  onNewInvoice: () => void;
   onLoadSample: () => void;
-  onReset: () => void;
+  onDownloadPdf: () => Promise<void>;
+  isExporting: boolean;
+  downloadSuccess: boolean;
 }
 
 export const TopNav: React.FC<TopNavProps> = ({
   invoiceNumber,
   clientName,
+  savedInvoicesCount,
+  isSaved,
+  onSaveInvoice,
+  onOpenInvoicesList,
+  onOpenShareModal,
+  onNewInvoice,
   onLoadSample,
-  onReset,
+  onDownloadPdf,
+  isExporting,
+  downloadSuccess,
 }) => {
-  const [isExporting, setIsExporting] = useState<boolean>(false);
-  const [downloadSuccess, setDownloadSuccess] = useState<boolean>(false);
-
-  const handleDownloadPdf = async () => {
-    setIsExporting(true);
-    setDownloadSuccess(false);
-    try {
-      const cleanClient = (clientName || "Client").replace(/[^a-zA-Z0-9_-]/g, "_");
-      const fileName = `Siwolo_Invoice_${invoiceNumber || "Draft"}_${cleanClient}.pdf`;
-      await generatePdf({
-        elementId: "invoice-document",
-        fileName,
-      });
-      setDownloadSuccess(true);
-      setTimeout(() => setDownloadSuccess(false), 3000);
-    } catch (err) {
-      console.error("PDF generation failed:", err);
-      alert("Failed to generate PDF. You can also use the 'Print' button to save as PDF.");
-    } finally {
-      setIsExporting(false);
-    }
-  };
-
   const handlePrint = () => {
     triggerPrint();
   };
@@ -69,57 +72,94 @@ export const TopNav: React.FC<TopNavProps> = ({
                 Law Advocates
               </span>
             </div>
-            <p className="text-[11px] text-zinc-500 font-medium hidden sm:block">
-              Digital Invoice Generation System
+            <p className="text-[11px] text-zinc-500 font-medium hidden sm:block truncate max-w-[260px]">
+              {clientName ? `Matter: ${clientName} (#${invoiceNumber})` : "Advocate Invoicing & Billing System"}
             </p>
           </div>
         </div>
 
         {/* Action Toolbar */}
-        <div className="flex items-center gap-2 sm:gap-2.5">
-          {/* Load Reference Sample Button */}
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          {/* Saved Invoices / Ledger Manager */}
           <button
             type="button"
-            onClick={onLoadSample}
-            title="Load sample invoice data from ref.pdf (Chemelil Trustees)"
-            className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-medium text-zinc-700 bg-zinc-100 hover:bg-zinc-200 hover:text-zinc-950 border border-zinc-300 rounded-lg transition"
+            onClick={onOpenInvoicesList}
+            title="View saved invoices history and ledger"
+            className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-semibold text-zinc-800 bg-zinc-100 hover:bg-zinc-200 border border-zinc-300 rounded-lg transition"
           >
-            <Sparkles className="w-3.5 h-3.5 text-zinc-900" />
-            <span className="hidden sm:inline">Load Reference Sample</span>
-            <span className="sm:hidden">Sample</span>
+            <FolderOpen className="w-3.5 h-3.5 text-zinc-700" />
+            <span className="hidden md:inline">Invoices</span>
+            <span className="bg-zinc-800 text-white text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold">
+              {savedInvoicesCount}
+            </span>
           </button>
 
-          {/* Reset / New Invoice Button */}
+          {/* New Invoice Button */}
           <button
             type="button"
-            onClick={onReset}
-            title="Create fresh empty invoice"
-            className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-medium text-zinc-600 hover:text-zinc-950 hover:bg-zinc-100 border border-transparent rounded-lg transition"
+            onClick={onNewInvoice}
+            title="Create a new clean blank invoice"
+            className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-medium text-zinc-700 bg-white hover:bg-zinc-50 border border-zinc-300 rounded-lg transition"
           >
-            <RotateCcw className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Reset</span>
+            <Plus className="w-3.5 h-3.5 text-zinc-900" />
+            <span className="hidden sm:inline">New</span>
+          </button>
+
+          {/* Save to Ledger Button */}
+          <button
+            type="button"
+            onClick={onSaveInvoice}
+            title="Save invoice to permanent ledger"
+            className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-semibold rounded-lg transition border ${
+              isSaved
+                ? "bg-emerald-50 text-emerald-800 border-emerald-300"
+                : "bg-white hover:bg-zinc-50 text-zinc-900 border-zinc-300"
+            }`}
+          >
+            {isSaved ? (
+              <>
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                <span className="hidden sm:inline">Saved</span>
+              </>
+            ) : (
+              <>
+                <Save className="w-3.5 h-3.5 text-zinc-700" />
+                <span className="hidden sm:inline">Save</span>
+              </>
+            )}
           </button>
 
           <div className="h-5 w-px bg-zinc-200 hidden sm:block" />
+
+          {/* Share to Client Button (WhatsApp, Email, Device Share) */}
+          <button
+            type="button"
+            onClick={onOpenShareModal}
+            title="Share invoice with client via WhatsApp, Email, or Apps"
+            className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-semibold text-zinc-900 bg-zinc-100 hover:bg-zinc-200 border border-zinc-300 rounded-lg transition shadow-2xs"
+          >
+            <Share2 className="w-3.5 h-3.5 text-zinc-800" />
+            <span>Share</span>
+          </button>
 
           {/* Print Invoice Button */}
           <button
             type="button"
             onClick={handlePrint}
             title="Print or save as PDF via system dialog"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-zinc-700 bg-white hover:bg-zinc-50 border border-zinc-300 rounded-lg shadow-xs transition"
+            className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-medium text-zinc-700 bg-white hover:bg-zinc-50 border border-zinc-300 rounded-lg transition hidden lg:inline-flex"
           >
             <Printer className="w-3.5 h-3.5 text-zinc-600" />
-            <span className="hidden md:inline">Print Invoice</span>
-            <span className="md:hidden">Print</span>
+            <span>Print</span>
           </button>
 
-          {/* Download PDF Button */}
+          {/* Download PDF Button (Direct file download to Downloads folder) */}
           <button
             type="button"
-            onClick={handleDownloadPdf}
+            onClick={onDownloadPdf}
             disabled={isExporting}
-            className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold rounded-lg shadow-xs transition ${
+            title="Download PDF directly to your computer's downloads folder"
+            className={`inline-flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 text-xs font-semibold rounded-lg shadow-xs transition ${
               downloadSuccess
                 ? "bg-zinc-900 text-white"
                 : "bg-black hover:bg-zinc-800 text-white active:scale-98"
@@ -132,7 +172,7 @@ export const TopNav: React.FC<TopNavProps> = ({
               </>
             ) : downloadSuccess ? (
               <>
-                <CheckCircle2 className="w-3.5 h-3.5" />
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
                 <span>Downloaded!</span>
               </>
             ) : (
@@ -141,6 +181,16 @@ export const TopNav: React.FC<TopNavProps> = ({
                 <span>Download PDF</span>
               </>
             )}
+          </button>
+
+          {/* Optional Sample Reference Demo Button */}
+          <button
+            type="button"
+            onClick={onLoadSample}
+            title="Load demo reference sample (Chemelil Trustees from ref.pdf)"
+            className="p-1.5 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 rounded-lg transition hidden xl:flex items-center justify-center"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
           </button>
         </div>
       </div>
