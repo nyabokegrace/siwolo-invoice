@@ -1,3 +1,5 @@
+export type InvoiceStatus = "draft" | "issued" | "paid";
+
 export interface InvoiceItem {
   id: string;
   description: string;
@@ -6,6 +8,7 @@ export interface InvoiceItem {
 }
 
 export interface ClientInfo {
+  id?: string;
   name: string;
   addressLine1: string;
   addressLine2: string;
@@ -23,9 +26,11 @@ export interface FirmInfo {
   paymentDetails: string;
   bankChargesNote: string;
   defaultNote: string;
+  logoUrl?: string;
 }
 
 export interface InvoiceData {
+  id?: string;
   invoiceNumber: string;
   invoiceDate: string;
   dueDate: string;
@@ -37,6 +42,9 @@ export interface InvoiceData {
   discount: number;     // fixed discount amount or deduction
   notes: string;
   firm: FirmInfo;
+  status?: InvoiceStatus;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface CalculatedTotals {

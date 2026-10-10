@@ -2,7 +2,7 @@ import { FirmInfo, InvoiceData } from "./types";
 
 export const DEFAULT_FIRM_INFO: FirmInfo = {
   name: "Siwolo P.O. Law Advocates",
-  addressLine: "Mbundu Complex, Langata Road",
+  addressLine: "Mbandu Complex, Langata Road",
   email: "info@siwoloadvocates.com",
   phone: "(254) 792300520",
   paymentDetails: "PAYMENT DETAILS: Paybill 625625 : Account Number: 7719608429: Bank - National Bank of Kenya",
@@ -77,8 +77,8 @@ export const REFERENCE_SAMPLE_INVOICE: InvoiceData = {
 
 export const INITIAL_EMPTY_INVOICE: InvoiceData = {
   invoiceNumber: "INV-0001",
-  invoiceDate: new Date().toISOString().split("T")[0],
-  dueDate: new Date().toISOString().split("T")[0],
+  invoiceDate: "2026-10-09",
+  dueDate: "2026-10-09",
   terms: "Due upon receipt",
   currency: "KES",
   client: {
