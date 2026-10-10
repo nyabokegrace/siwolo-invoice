@@ -1,0 +1,41 @@
+version: "3.8"
+
+services:
+  # Next.js Invoice Generation Application
+  app:
+    build:
+      context: ./siwolo-invoice-generator
+      dockerfile: Dockerfile
+    container_name: siwolo-invoice-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://siwolo_advocate:siwolo_secure_pass@db:5432/siwolo_invoicedb?sslmode=disable
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # Dedicated PostgreSQL Database
+  db:
+    image: postgres:16-alpine
+    container_name: siwolo-invoice-db
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: siwolo_advocate
+      POSTGRES_PASSWORD: siwolo_secure_pass
+      POSTGRES_DB: siwolo_invoicedb
+    volumes:
+      - siwolo_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U siwolo_advocate -d siwolo_invoicedb"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  siwolo_pgdata:
+    driver: local
