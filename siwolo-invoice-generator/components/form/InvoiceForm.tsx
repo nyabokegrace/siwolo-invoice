@@ -12,8 +12,11 @@ import { AlertCircle } from "lucide-react";
 interface InvoiceFormProps {
   invoice: InvoiceData;
   totals: CalculatedTotals;
+  savedClients?: ClientInfo[];
   onUpdateInvoiceField: (field: string, value: string | number) => void;
   onUpdateClient: (field: keyof ClientInfo, value: string) => void;
+  onSelectClient?: (client: ClientInfo) => void;
+  onClearClient?: () => void;
   onAddItem: (presetDescription?: string) => void;
   onUpdateItem: (id: string, field: keyof InvoiceItem, value: string | number) => void;
   onRemoveItem: (id: string) => void;
@@ -25,8 +28,11 @@ interface InvoiceFormProps {
 export const InvoiceForm: React.FC<InvoiceFormProps> = ({
   invoice,
   totals,
+  savedClients = [],
   onUpdateInvoiceField,
   onUpdateClient,
+  onSelectClient,
+  onClearClient,
   onAddItem,
   onUpdateItem,
   onRemoveItem,
@@ -63,7 +69,10 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({
       {/* Client Information */}
       <ClientForm
         client={invoice.client}
+        savedClients={savedClients}
         onChange={onUpdateClient}
+        onSelectClient={onSelectClient}
+        onClearClient={onClearClient}
       />
 
       {/* Invoice Line Items */}
