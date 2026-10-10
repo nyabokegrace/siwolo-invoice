@@ -1,0 +1,71 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model FirmProfile {
+  id              String   @id @default("firm_default")
+  name            String   @default("Siwolo P.O. Law Advocates")
+  addressLine     String   @default("Mbandu Complex, Langata Road")
+  email           String   @default("info@siwoloadvocates.com")
+  phone           String   @default("(254) 792300520")
+  paymentDetails  String   @default("PAYMENT DETAILS: Paybill 625625 : Account Number: 7719608429: Bank - National Bank of Kenya")
+  bankChargesNote String   @default("NOTE: ALL BANK CHARGES ON YOUR ACCOUNT")
+  defaultNote     String   @default("Thank you for your business!")
+  logoUrl         String?  @db.Text
+  updatedAt       DateTime @updatedAt
+  createdAt       DateTime @default(now())
+}
+
+model Client {
+  id           String    @id @default(cuid())
+  name         String    @unique
+  addressLine1 String?   @default("")
+  addressLine2 String?   @default("")
+  postalCode   String?   @default("")
+  phone        String?   @default("")
+  email        String?   @default("")
+  customerId   String?   @default("")
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  invoices     Invoice[]
+}
+
+model Invoice {
+  id               String        @id @default(cuid())
+  invoiceNumber    String        @unique
+  invoiceDate      String
+  dueDate          String
+  terms            String        @default("Due upon receipt")
+  currency         String        @default("KES")
+  status           String        @default("draft")
+  taxRate          Float         @default(0.0)
+  discount         Float         @default(0.0)
+  notes            String        @default("Thank you for your business!")
+  clientId         String?
+  client           Client?       @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  clientName       String
+  clientAddress1   String?       @default("")
+  clientAddress2   String?       @default("")
+  clientPostal     String?       @default("")
+  clientPhone      String?       @default("")
+  clientEmail      String?       @default("")
+  clientCustomerId String?       @default("")
+  items            InvoiceItem[]
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+}
+
+model InvoiceItem {
+  id          String   @id @default(cuid())
+  invoiceId   String
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  description String
+  quantity    Float    @default(1.0)
+  unitPrice   Float    @default(0.0)
+  sortOrder   Int      @default(0)
+}
