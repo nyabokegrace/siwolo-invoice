@@ -24,6 +24,9 @@ async function getDbClient(): Promise<{
         max: 10,
         idleTimeoutMillis: 30000,
         connectionTimeoutMillis: 5000,
+        ssl: connectionString.includes("render.com") || connectionString.includes("amazonaws.com")
+          ? { rejectUnauthorized: false }
+          : undefined,
       });
     }
     return {
@@ -441,3 +444,55 @@ export async function deleteInvoiceDb(idOrNumber: string): Promise<boolean> {
     return false;
   }
 }
+
+export async function updateInvoiceStatusDb(id: string, status: string): Promise<boolean> {
+  try {
+    const db = await getDbClient();
+    await initDb();
+    await db.query(
+      "UPDATE invoices SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2",
+      [status, id]
+    );
+    return true;
+  } catch (err) {
+    console.error("Failed to update invoice status in database:", err);
+    return false;
+  }
+}
+
+export async function getNextInvoiceNumberDb(): Promise<string> {
+  try {
+    const db = await getDbClient();
+    await initDb();
+    const res = await db.query(
+      `SELECT invoice_number FROM invoices ORDER BY created_at DESC LIMIT 100;`
+    );
+
+    if (res.rows.length === 0) return "INV-0001";
+
+    let maxNum = 0;
+    let detectedPrefix = "INV-";
+    let padLen = 4;
+
+    for (const row of res.rows) {
+      const numStr = (row.invoice_number || "").trim();
+      const match = numStr.match(/^(.*?)(\d+)$/);
+      if (match) {
+        detectedPrefix = match[1] || "";
+        const val = parseInt(match[2], 10);
+        if (val > maxNum) {
+          maxNum = val;
+          padLen = Math.max(padLen, match[2].length);
+        }
+      }
+    }
+
+    const nextVal = maxNum + 1;
+    const padded = nextVal.toString().padStart(padLen, "0");
+    return `${detectedPrefix}${padded}`;
+  } catch (err) {
+    console.error("Failed to get next invoice number from database:", err);
+    return "INV-0001";
+  }
+}
+

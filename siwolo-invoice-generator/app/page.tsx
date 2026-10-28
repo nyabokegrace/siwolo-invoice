@@ -41,41 +41,49 @@ export default function InvoiceDashboard() {
   const [downloadSuccess, setDownloadSuccess] = useState<boolean>(false);
   const [isSaved, setIsSaved] = useState<boolean>(false);
   const [isAutoSaved, setIsAutoSaved] = useState<boolean>(false);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // Auto-save debounce ref
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // On mount: asynchronously load persistent draft, firm profile, and saved invoices
+  // On mount: load from DB first, fallback to localStorage
   useEffect(() => {
-    const timer = setTimeout(() => {
-      const list = loadSavedInvoices();
-      setSavedInvoices(list);
+    const init = async () => {
+      // Load localStorage as immediate fallback
+      setSavedInvoices(loadSavedInvoices());
       setSavedClients(loadSavedClients());
 
+      // Sync from DB (primary source of truth)
+      const res = await syncFromDatabase();
+      if (res && res.invoicesCount > 0) {
+        setSavedInvoices(loadSavedInvoices());
+        setSavedClients(loadSavedClients());
+      }
+
+      // Load draft or create fresh invoice with correct next number
       const draft = loadCurrentDraft();
       if (draft && draft.invoiceNumber) {
         setInvoice(draft);
       } else {
         const firm = loadFirmProfile();
-        setInvoice(createNewBlankInvoice(firm));
+        const fresh = await createNewBlankInvoice(firm);
+        setInvoice(fresh);
       }
-
-      // Check and sync from PostgreSQL if available
-      syncFromDatabase().then((res) => {
-        if (res && res.invoicesCount > 0) {
-          setSavedInvoices(loadSavedInvoices());
-          setSavedClients(loadSavedClients());
-        }
-      });
-    }, 0);
-
-    return () => clearTimeout(timer);
+    };
+    init();
   }, []);
 
-  // Reload saved invoices & clients list helper
-  const reloadSavedInvoices = useCallback(() => {
-    setSavedInvoices(loadSavedInvoices());
-    setSavedClients(loadSavedClients());
+  // Reload saved invoices & clients list helper (from DB)
+  const reloadSavedInvoices = useCallback(async () => {
+    const res = await syncFromDatabase();
+    if (res && res.invoicesCount > 0) {
+      setSavedInvoices(loadSavedInvoices());
+      setSavedClients(loadSavedClients());
+    } else {
+      setSavedInvoices(loadSavedInvoices());
+      setSavedClients(loadSavedClients());
+    }
   }, []);
 
   // Derive calculated totals automatically
@@ -217,26 +225,40 @@ export default function InvoiceDashboard() {
   };
 
   // Save invoice record to permanent ledger
-  const handleSaveInvoice = () => {
-    const saved = saveInvoiceRecord(invoice);
-    setInvoice(saved);
-    reloadSavedInvoices();
-    setIsSaved(true);
-    setTimeout(() => setIsSaved(false), 3000);
+  const handleSaveInvoice = async () => {
+    setIsSaving(true);
+    setSaveError(null);
+    try {
+      await saveInvoiceRecord(invoice);
+      await reloadSavedInvoices();
+      setIsSaved(true);
+      setTimeout(() => setIsSaved(false), 3000);
+      // Auto-clear: open a fresh blank invoice after successful save
+      const firm = loadFirmProfile();
+      const fresh = await createNewBlankInvoice(firm);
+      setInvoice(fresh);
+      saveCurrentDraft(fresh);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to save invoice";
+      setSaveError(msg);
+      setTimeout(() => setSaveError(null), 5000);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   // Create new blank invoice
-  const handleNewInvoice = () => {
+  const handleNewInvoice = async () => {
     const firm = loadFirmProfile();
-    const fresh = createNewBlankInvoice(firm);
+    const fresh = await createNewBlankInvoice(firm);
     setInvoice(fresh);
     saveCurrentDraft(fresh);
     setIsSaved(false);
   };
 
   // Duplicate an invoice
-  const handleDuplicateInvoice = (targetInvoice: InvoiceData) => {
-    const nextNum = getNextSequentialInvoiceNumber();
+  const handleDuplicateInvoice = async (targetInvoice: InvoiceData) => {
+    const nextNum = await getNextSequentialInvoiceNumber();
     const duplicated: InvoiceData = {
       ...JSON.parse(JSON.stringify(targetInvoice)),
       id: `inv-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
@@ -306,12 +328,20 @@ export default function InvoiceDashboard() {
 
   return (
     <div className="min-h-screen flex flex-col bg-zinc-100">
+      {/* Save Error Banner */}
+      {saveError && (
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-rose-50 border border-rose-300 text-rose-800 text-xs font-medium px-4 py-2 rounded-lg shadow-md flex items-center gap-2">
+          <span>⚠️ {saveError}</span>
+        </div>
+      )}
+
       {/* Top Navigation */}
       <TopNav
         invoiceNumber={invoice.invoiceNumber}
         clientName={invoice.client.name}
         savedInvoicesCount={savedInvoices.length}
         isSaved={isSaved}
+        isSaving={isSaving}
         onSaveInvoice={handleSaveInvoice}
         onOpenInvoicesList={() => setIsSavedModalOpen(true)}
         onOpenShareModal={() => setIsShareModalOpen(true)}

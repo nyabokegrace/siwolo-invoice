@@ -67,40 +67,40 @@ export function loadSavedClients(): ClientInfo[] {
   return [];
 }
 
-export function saveClient(client: ClientInfo): void {
-  if (!isBrowser() || !client.name?.trim()) return;
+export async function saveClient(client: ClientInfo): Promise<void> {
+  if (!client.name?.trim()) return;
   try {
-    const clients = loadSavedClients();
-    const existingIndex = clients.findIndex(
-      (c) =>
-        (client.id && c.id === client.id) ||
-        c.name.trim().toLowerCase() === client.name.trim().toLowerCase()
-    );
-
-    const clientToSave: ClientInfo = {
-      ...client,
-      id: client.id || `client-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-    };
-
-    if (existingIndex >= 0) {
-      clients[existingIndex] = {
-        ...clients[existingIndex],
-        ...clientToSave,
+    // Update localStorage cache
+    if (isBrowser()) {
+      const clients = loadSavedClients();
+      const existingIndex = clients.findIndex(
+        (c) =>
+          (client.id && c.id === client.id) ||
+          c.name.trim().toLowerCase() === client.name.trim().toLowerCase()
+      );
+      const clientToSave: ClientInfo = {
+        ...client,
+        id:
+          client.id ||
+          `client-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       };
-    } else {
-      clients.unshift(clientToSave);
+      if (existingIndex >= 0) {
+        clients[existingIndex] = { ...clients[existingIndex], ...clientToSave };
+      } else {
+        clients.unshift(clientToSave);
+      }
+      localStorage.setItem(STORAGE_KEY_CLIENTS, JSON.stringify(clients));
     }
-
-    localStorage.setItem(STORAGE_KEY_CLIENTS, JSON.stringify(clients));
+    // Sync to DB
     if (typeof fetch !== "undefined") {
-      fetch("/api/clients", {
+      await fetch("/api/clients", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(clientToSave),
-      }).catch(() => {});
+        body: JSON.stringify(client),
+      });
     }
   } catch (e) {
-    console.error("Failed to save client to storage:", e);
+    console.error("Failed to save client:", e);
   }
 }
 
@@ -108,7 +108,9 @@ export function deleteClient(clientIdOrName: string): void {
   if (!isBrowser()) return;
   try {
     const clients = loadSavedClients().filter(
-      (c) => c.id !== clientIdOrName && c.name.toLowerCase() !== clientIdOrName.toLowerCase()
+      (c) =>
+        c.id !== clientIdOrName &&
+        c.name.toLowerCase() !== clientIdOrName.toLowerCase()
     );
     localStorage.setItem(STORAGE_KEY_CLIENTS, JSON.stringify(clients));
   } catch (e) {
@@ -140,49 +142,57 @@ export function loadSavedInvoices(): InvoiceData[] {
   return [];
 }
 
-export function saveInvoiceRecord(invoice: InvoiceData): InvoiceData {
-  if (!isBrowser()) return invoice;
-  try {
-    const invoices = loadSavedInvoices();
-    const now = new Date().toISOString();
-    const id = invoice.id || `inv-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+export async function saveInvoiceRecord(invoice: InvoiceData): Promise<InvoiceData> {
+  const now = new Date().toISOString();
+  const id =
+    invoice.id ||
+    `inv-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
 
-    const recordToSave: InvoiceData = {
-      ...invoice,
-      id,
-      status: invoice.status || "draft",
-      createdAt: invoice.createdAt || now,
-      updatedAt: now,
-    };
+  const recordToSave: InvoiceData = {
+    ...invoice,
+    id,
+    status: invoice.status || "draft",
+    createdAt: invoice.createdAt || now,
+    updatedAt: now,
+  };
 
-    const existingIndex = invoices.findIndex((item) => item.id === id);
-    if (existingIndex >= 0) {
-      invoices[existingIndex] = recordToSave;
-    } else {
-      invoices.unshift(recordToSave);
+  // Update localStorage cache
+  if (isBrowser()) {
+    try {
+      const invoices = loadSavedInvoices();
+      const existingIndex = invoices.findIndex((item) => item.id === id);
+      if (existingIndex >= 0) {
+        invoices[existingIndex] = recordToSave;
+      } else {
+        invoices.unshift(recordToSave);
+      }
+      localStorage.setItem(STORAGE_KEY_INVOICES, JSON.stringify(invoices));
+    } catch (e) {
+      console.error("Failed to update localStorage cache:", e);
     }
-
-    localStorage.setItem(STORAGE_KEY_INVOICES, JSON.stringify(invoices));
-
-    // Also auto-save/update client in client directory if client has a name
-    if (recordToSave.client?.name?.trim()) {
-      saveClient(recordToSave.client);
-    }
-
-    // Background sync to PostgreSQL database
-    if (typeof fetch !== "undefined") {
-      fetch("/api/invoices", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(recordToSave),
-      }).catch(() => {});
-    }
-
-    return recordToSave;
-  } catch (e) {
-    console.error("Failed to save invoice record:", e);
-    return invoice;
   }
+
+  // Save client to cache + DB
+  if (recordToSave.client?.name?.trim()) {
+    await saveClient(recordToSave.client);
+  }
+
+  // Primary save: PostgreSQL via API (awaited — not fire-and-forget)
+  if (typeof fetch !== "undefined") {
+    const res = await fetch("/api/invoices", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(recordToSave),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(
+        (err as { error?: string })?.error || "Failed to save invoice to database"
+      );
+    }
+  }
+
+  return recordToSave;
 }
 
 export function deleteInvoiceRecord(id: string): void {
@@ -201,18 +211,31 @@ export function deleteInvoiceRecord(id: string): void {
   }
 }
 
-export function updateInvoiceStatus(id: string, status: "draft" | "issued" | "paid"): void {
-  if (!isBrowser()) return;
-  try {
-    const invoices = loadSavedInvoices();
-    const target = invoices.find((inv) => inv.id === id);
-    if (target) {
-      target.status = status;
-      target.updatedAt = new Date().toISOString();
-      localStorage.setItem(STORAGE_KEY_INVOICES, JSON.stringify(invoices));
+export async function updateInvoiceStatus(
+  id: string,
+  status: "draft" | "issued" | "paid"
+): Promise<void> {
+  // Update localStorage
+  if (isBrowser()) {
+    try {
+      const invoices = loadSavedInvoices();
+      const target = invoices.find((inv) => inv.id === id);
+      if (target) {
+        target.status = status;
+        target.updatedAt = new Date().toISOString();
+        localStorage.setItem(STORAGE_KEY_INVOICES, JSON.stringify(invoices));
+      }
+    } catch (e) {
+      console.error("Failed to update invoice status in localStorage:", e);
     }
-  } catch (e) {
-    console.error("Failed to update invoice status:", e);
+  }
+  // Sync to database
+  if (typeof fetch !== "undefined") {
+    fetch(`/api/invoices/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status }),
+    }).catch(() => {});
   }
 }
 
@@ -255,7 +278,7 @@ export function clearCurrentDraft(): void {
 // SEQUENTIAL NUMBERING & NEW INVOICE FACTORY
 // -------------------------------------------------------------
 
-export function getNextSequentialInvoiceNumber(): string {
+export function getNextSequentialInvoiceNumberLocal(): string {
   const invoices = loadSavedInvoices();
   if (invoices.length === 0) {
     return "INV-0001";
@@ -283,11 +306,30 @@ export function getNextSequentialInvoiceNumber(): string {
   return `${detectedPrefix}${padded}`;
 }
 
-export function createNewBlankInvoice(firmInfo?: FirmInfo): InvoiceData {
+export async function getNextSequentialInvoiceNumber(): Promise<string> {
+  // Query the database first (source of truth across all devices)
+  if (typeof fetch !== "undefined") {
+    try {
+      const res = await fetch("/api/invoices/next-number");
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.nextNumber) {
+          return json.nextNumber;
+        }
+      }
+    } catch {
+      // fall through to local fallback
+    }
+  }
+  // Fallback to localStorage
+  return getNextSequentialInvoiceNumberLocal();
+}
+
+export async function createNewBlankInvoice(firmInfo?: FirmInfo): Promise<InvoiceData> {
   const firm = firmInfo || loadFirmProfile();
   const today = isBrowser() ? new Date().toISOString().split("T")[0] : "2026-10-09";
   const nowTs = isBrowser() ? Date.now() : 1775730000000;
-  const nextNum = getNextSequentialInvoiceNumber();
+  const nextNum = await getNextSequentialInvoiceNumber();
 
   const emptyItem: InvoiceItem = {
     id: `item-${nowTs}-1`,
@@ -297,7 +339,9 @@ export function createNewBlankInvoice(firmInfo?: FirmInfo): InvoiceData {
   };
 
   return {
-    id: `inv-${nowTs}-${isBrowser() ? Math.random().toString(36).substring(2, 6) : "init"}`,
+    id: `inv-${nowTs}-${
+      isBrowser() ? Math.random().toString(36).substring(2, 6) : "init"
+    }`,
     invoiceNumber: nextNum,
     invoiceDate: today,
     dueDate: today,
@@ -349,7 +393,10 @@ export function importBackupJson(jsonString: string): {
   invoicesCount?: number;
 } {
   if (!isBrowser()) {
-    return { success: false, message: "Storage not available in current environment." };
+    return {
+      success: false,
+      message: "Storage not available in current environment.",
+    };
   }
 
   try {
@@ -403,7 +450,11 @@ export async function syncFromDatabase(): Promise<{
 
     if (invRes && invRes.ok) {
       const invJson = await invRes.json();
-      if (invJson.success && Array.isArray(invJson.data) && invJson.data.length > 0) {
+      if (
+        invJson.success &&
+        Array.isArray(invJson.data) &&
+        invJson.data.length > 0
+      ) {
         localStorage.setItem(STORAGE_KEY_INVOICES, JSON.stringify(invJson.data));
         invoicesCount = invJson.data.length;
       }
@@ -411,7 +462,11 @@ export async function syncFromDatabase(): Promise<{
 
     if (cliRes && cliRes.ok) {
       const cliJson = await cliRes.json();
-      if (cliJson.success && Array.isArray(cliJson.data) && cliJson.data.length > 0) {
+      if (
+        cliJson.success &&
+        Array.isArray(cliJson.data) &&
+        cliJson.data.length > 0
+      ) {
         localStorage.setItem(STORAGE_KEY_CLIENTS, JSON.stringify(cliJson.data));
         clientsCount = cliJson.data.length;
       }

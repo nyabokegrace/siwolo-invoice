@@ -73,8 +73,8 @@ export const SavedInvoicesModal: React.FC<SavedInvoicesModalProps> = ({
   const countIssued = invoices.filter((i) => i.status === "issued").length;
   const countPaid = invoices.filter((i) => i.status === "paid").length;
 
-  const handleStatusChange = (id: string, newStatus: InvoiceStatus) => {
-    updateInvoiceStatus(id, newStatus);
+  const handleStatusChange = async (id: string, newStatus: InvoiceStatus) => {
+    await updateInvoiceStatus(id, newStatus);
     onReloadInvoices();
   };
 
