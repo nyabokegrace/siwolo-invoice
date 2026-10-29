@@ -20,6 +20,7 @@ interface TopNavProps {
   clientName: string;
   savedInvoicesCount: number;
   isSaved: boolean;
+  isSaving?: boolean;
   onSaveInvoice: () => void;
   onOpenInvoicesList: () => void;
   onOpenShareModal: () => void;
@@ -35,6 +36,7 @@ export const TopNav: React.FC<TopNavProps> = ({
   clientName,
   savedInvoicesCount,
   isSaved,
+  isSaving,
   onSaveInvoice,
   onOpenInvoicesList,
   onOpenShareModal,
@@ -109,14 +111,20 @@ export const TopNav: React.FC<TopNavProps> = ({
           <button
             type="button"
             onClick={onSaveInvoice}
+            disabled={isSaving}
             title="Save invoice to permanent ledger"
-            className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-semibold rounded-lg transition border ${
+            className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-semibold rounded-lg transition border disabled:opacity-60 disabled:cursor-not-allowed ${
               isSaved
                 ? "bg-emerald-50 text-emerald-800 border-emerald-300"
                 : "bg-white hover:bg-zinc-50 text-zinc-900 border-zinc-300"
             }`}
           >
-            {isSaved ? (
+            {isSaving ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-zinc-500" />
+                <span className="hidden sm:inline">Saving...</span>
+              </>
+            ) : isSaved ? (
               <>
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                 <span className="hidden sm:inline">Saved</span>
